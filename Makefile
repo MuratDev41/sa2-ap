@@ -680,6 +680,8 @@ sa1:
 sa2:
 	@$(MAKE) GAME_NAME=sa2
 
+trilogy: sa1 sa2
+
 $(TOOLDIRS): tool_libs
 	@$(MAKE) -C $@
     

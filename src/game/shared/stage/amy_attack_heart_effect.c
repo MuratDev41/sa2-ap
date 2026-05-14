@@ -152,7 +152,6 @@ static void Task_AmyAttackHeartEffect(void)
 #if (GAME == GAME_SA1)
     if (hearts->initialCharState != gPlayer.charState)
 #else
-    // TODO: Fix horrible cast!
     if ((!PLAYER_IS_ALIVE)
         || ((hearts->initialPlayerAnim != gPlayer.anim || hearts->initialPlayerVarient != gPlayer.variant)
             && (gPlayer.anim != SA2_ANIM_CHAR(SA2_CHAR_ANIM_51, CHARACTER_AMY) || gPlayer.variant != 1)))

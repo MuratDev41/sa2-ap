@@ -375,7 +375,7 @@ void ReceiveRoomEvent_ReachedStageGoal(union MultiSioData *recv, u8 i)
         }
 
         if (!somebool) {
-            CreateMultiplayerFinishHandler();
+            CreateMultiplayerFinishTransition();
         }
     }
 }
