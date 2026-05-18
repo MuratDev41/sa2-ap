@@ -95,3 +95,4 @@ sa2_debug.log
 
 # third party deps
 /ext
+sa2_settings.cfg
