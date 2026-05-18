@@ -132,12 +132,8 @@ NONMATCH("asm/non_matching/engine/sa2__sub_8002B20.inc", bool32 SA2_LABEL(sub_80
         } else {
             // _08002BD8
 #if WIDESCREEN_HACK
-            if (bg->flags & BACKGROUND_FLAG_IS_LEVEL_MAP) {
-                if (gBgCntRegs[bgId] & BGCNT_TXT512x256) {
-                    sp0C = 64;
-                } else {
-                    sp0C = 32;
-                }
+            if (gBgCntRegs[bgId] & 0x4000) {
+                sp0C = 64;
             } else {
                 sp0C = 32;
             }
@@ -161,6 +157,13 @@ NONMATCH("asm/non_matching/engine/sa2__sub_8002B20.inc", bool32 SA2_LABEL(sub_80
         if (!(bg->flags & BACKGROUND_FLAG_20)) {
             if (!(bg->flags & BACKGROUND_FLAG_IS_LEVEL_MAP)) {
                 // _08002C20
+#if WIDESCREEN_HACK
+                {
+                    int hTiles = (affine & 1) ? 64 : 32;
+                    int vTiles = (affine & 2) ? 64 : 32;
+                    memset(bg->layoutVram, 0, hTiles * vTiles * bytesPerTileIndex);
+                }
+#endif
                 u8 *r1 = CastPointer(bg->layoutVram, bg->unk24 * sp0C);
                 u16 *r7 = CastPointer(r1, bg->unk22 * bytesPerTileIndex);
                 u16 r5 = bg->targetTilesY;

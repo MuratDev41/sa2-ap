@@ -25,6 +25,13 @@
 
 #include "data/sa2/recordings.h"
 
+bool8 gIsTitleScreenActive = FALSE;
+
+static void TaskDestructor_TitleScreen(struct Task_ *t)
+{
+    gIsTitleScreenActive = FALSE;
+}
+
 // Temp hack to allow playing the special stages from the chao garden
 #if PORTABLE
 #include "game/shared/menus/unused_level_select.h"
@@ -300,7 +307,8 @@ void CreateTitleScreen(void)
     s32 i, val;
     s16 denom;
 
-    t = TaskCreate(Task_IntroStartSegaLogoAnim, sizeof(TitleScreen), 0x1000, 0, NULL);
+    gIsTitleScreenActive = FALSE;
+    t = TaskCreate(Task_IntroStartSegaLogoAnim, sizeof(TitleScreen), 0x1000, 0, TaskDestructor_TitleScreen);
     titleScreen = TASK_DATA(t);
 
     titleScreen->unkF34 = Q(2);
@@ -360,6 +368,8 @@ static void CreateTitleScreenWithoutIntro(TitleScreen *titleScreen)
 {
     ScreenFade *fade;
     Background *bg0, *config40;
+
+    gIsTitleScreenActive = TRUE;
 
     // Size of filler between unk2B4
     // and unkDF4
@@ -946,6 +956,7 @@ static void Task_IntroSkyAnim(void)
         DrawBackground(bg0);
 
         gBgCntRegs[2] &= ~DISPCNT_WIN0_ON;
+        gIsTitleScreenActive = TRUE;
         gCurTask->main = Task_IntroFadeInTitleScreenAnim;
 
         gDispCnt |= DISPCNT_BG2_ON;
@@ -1769,7 +1780,7 @@ void CreateTitleScreenAndSkipIntro(void)
     Task *t;
     REG_SIOCNT |= SIO_INTR_ENABLE;
 
-    t = TaskCreate(Task_ShowPressStartMenu, sizeof(TitleScreen), 0x1000, 0, 0);
+    t = TaskCreate(Task_ShowPressStartMenu, sizeof(TitleScreen), 0x1000, 0, TaskDestructor_TitleScreen);
     CreateTitleScreenWithoutIntro(TASK_DATA(t));
 }
 
@@ -1778,7 +1789,7 @@ void CreateTitleScreenAtPlayModeMenu(void)
     Task *t;
     REG_SIOCNT |= SIO_INTR_ENABLE;
 
-    t = TaskCreate(Task_JumpToPlayModeMenu, sizeof(TitleScreen), 0x1000, 0, 0);
+    t = TaskCreate(Task_JumpToPlayModeMenu, sizeof(TitleScreen), 0x1000, 0, TaskDestructor_TitleScreen);
     CreateTitleScreenWithoutIntro(TASK_DATA(t));
 }
 
@@ -1787,7 +1798,7 @@ void CreateTitleScreenAtSinglePlayerMenu(void)
     Task *t;
     REG_SIOCNT |= SIO_INTR_ENABLE;
 
-    t = TaskCreate(Task_JumpToSinglePlayerMenu, sizeof(TitleScreen), 0x1000, 0, 0);
+    t = TaskCreate(Task_JumpToSinglePlayerMenu, sizeof(TitleScreen), 0x1000, 0, TaskDestructor_TitleScreen);
     CreateTitleScreenWithoutIntro(TASK_DATA(t));
 }
 
@@ -1795,6 +1806,8 @@ static void SkipIntro(TitleScreen *titleScreen)
 {
     ScreenFade *fade = &titleScreen->unk270;
     gFlags &= ~FLAGS_EXECUTE_HBLANK_COPY;
+
+    gIsTitleScreenActive = TRUE;
 
     fade->window = 1;
     fade->brightness = 0;

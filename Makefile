@@ -228,6 +228,21 @@ SOUND_ASM_SRCS := $(wildcard $(SOUND_ASM_SUBDIR)/*.s)
 SOUND_ASM_OBJS := $(patsubst $(SOUND_ASM_SUBDIR)/%.s,$(SOUND_ASM_BUILDDIR)/%.o,$(SOUND_ASM_SRCS))
 
 OBJS := $(C_OBJS) $(CXX_OBJS) $(ASM_OBJS) $(C_ASM_OBJS) $(DATA_ASM_OBJS) $(SONG_OBJS) $(MID_OBJS)
+
+ifeq ($(PLATFORM),sdl)
+IMGUI_DIR := ext/imgui
+IMGUI_SRCS := $(IMGUI_DIR)/imgui.cpp \
+              $(IMGUI_DIR)/imgui_draw.cpp \
+              $(IMGUI_DIR)/imgui_tables.cpp \
+              $(IMGUI_DIR)/imgui_widgets.cpp \
+              $(IMGUI_DIR)/backends/imgui_impl_sdl2.cpp \
+              $(IMGUI_DIR)/backends/imgui_impl_sdlrenderer2.cpp
+
+IMGUI_OBJS := $(patsubst %.cpp,$(C_BUILDDIR)/%.o,$(IMGUI_SRCS))
+OBJS += $(IMGUI_OBJS)
+IMGUI_CPPFLAGS := -I$(IMGUI_DIR) -I$(IMGUI_DIR)/backends
+endif
+
 OBJS_REL := $(patsubst $(OBJ_DIR)/%,%,$(OBJS))
 
 FORMAT_SRC_PATHS := $(shell find . -name "*.c" ! -path '*/src/data/*' ! -path '*/build/*' ! -path '*/ext/*')
@@ -243,6 +258,10 @@ CC1FLAGS ?= -Wimplicit -Wparentheses -Werror
 
 ifneq ($(GAME_VARIANT), DEFAULT)
 	CPPFLAGS += -D $(GAME_VARIANT)
+endif
+
+ifeq ($(PLATFORM),sdl)
+	CPPFLAGS += $(IMGUI_CPPFLAGS)
 endif
 
 # These have to(?) be defined this way, because
@@ -323,7 +342,7 @@ else
   CPPFLAGS += -D ENABLE_DECOMP_CREDITS=1
 endif
 
-CXXFLAGS := $(CC1FLAGS) $(CPPFLAGS) -fno-rtti -fno-exceptions -std=c++11
+CXXFLAGS := $(CC1FLAGS) $(CPPFLAGS) -fno-rtti -fno-exceptions -fno-threadsafe-statics -std=c++11
 
 ifeq ($(PLATFORM),gba)
   ASFLAGS  += -mcpu=arm7tdmi -mthumb-interwork
@@ -592,6 +611,17 @@ $(C_BUILDDIR)/%.d: $(C_SUBDIR)/%.c
 $(C_BUILDDIR)/%.d: $(C_SUBDIR)/%.cc
 	@$(shell mkdir -p $(shell dirname '$(C_BUILDDIR)/$*.d'))
 	$(SCANINC) -M $@ $(INCLUDE_SCANINC_ARGS) $<
+$(C_BUILDDIR)/ext/imgui/%.o: ext/imgui/%.cpp
+	@echo "$(CXX) <flags> -o $@ $<"
+	@$(shell mkdir -p $(shell dirname '$@'))
+	@$(CXX) $(CXXFLAGS) -o $(patsubst %.o,%.s,$@) $<
+	@$(AS) $(ASFLAGS) $(patsubst %.o,%.s,$@) -o $@
+
+$(C_BUILDDIR)/ext/imgui/backends/%.o: ext/imgui/backends/%.cpp
+	@echo "$(CXX) <flags> -o $@ $<"
+	@$(shell mkdir -p $(shell dirname '$@'))
+	@$(CXX) $(CXXFLAGS) -o $(patsubst %.o,%.s,$@) $<
+	@$(AS) $(ASFLAGS) $(patsubst %.o,%.s,$@) -o $@
 
 # rule for sources from the src dir (parts of libraries)
 $(C_BUILDDIR)/%.o: $(C_SUBDIR)/%.s

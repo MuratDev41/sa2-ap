@@ -2188,7 +2188,7 @@ template <window_render_function outfn, unsigned winnum> static void render_wind
 
 // Renders a full scaleline, taking into consideration windowing effects.
 // Breaks the rendering step into N steps, for each windowed region.
-static void render_scanline_window(u16 *scanline)
+static void render_scanline_window(u16 *scanline, u32 width = DISPLAY_WIDTH)
 {
     u16 dispcnt = read_ioreg(REG_ADDR_DISPCNT);
     u32 win_ctrl = (dispcnt >> 13);
@@ -2196,35 +2196,35 @@ static void render_scanline_window(u16 *scanline)
     // Priority decoding for windows
     switch (win_ctrl) {
         case 0x0: // No windows are active.
-            render_scanline_conditional(0, DISPLAY_WIDTH, scanline);
+            render_scanline_conditional(0, width, scanline);
             break;
 
         case 0x1: // Window 0
-            render_window_n_pass<render_windowout_pass, 0>(scanline, 0, DISPLAY_WIDTH);
+            render_window_n_pass<render_windowout_pass, 0>(scanline, 0, width);
             break;
 
         case 0x2: // Window 1
-            render_window_n_pass<render_windowout_pass, 1>(scanline, 0, DISPLAY_WIDTH);
+            render_window_n_pass<render_windowout_pass, 1>(scanline, 0, width);
             break;
 
         case 0x3: // Window 0 & 1
-            render_window_n_pass<render_window_n_pass<render_windowout_pass, 1>, 0>(scanline, 0, DISPLAY_WIDTH);
+            render_window_n_pass<render_window_n_pass<render_windowout_pass, 1>, 0>(scanline, 0, width);
             break;
 
         case 0x4: // Window Obj
-            render_windowobj_pass(scanline, 0, DISPLAY_WIDTH);
+            render_windowobj_pass(scanline, 0, width);
             break;
 
         case 0x5: // Window 0 & Obj
-            render_window_n_pass<render_windowobj_pass, 0>(scanline, 0, DISPLAY_WIDTH);
+            render_window_n_pass<render_windowobj_pass, 0>(scanline, 0, width);
             break;
 
         case 0x6: // Window 1 & Obj
-            render_window_n_pass<render_windowobj_pass, 1>(scanline, 0, DISPLAY_WIDTH);
+            render_window_n_pass<render_windowobj_pass, 1>(scanline, 0, width);
             break;
 
         case 0x7: // Window 0, 1 & Obj
-            render_window_n_pass<render_window_n_pass<render_windowobj_pass, 1>, 0>(scanline, 0, DISPLAY_WIDTH);
+            render_window_n_pass<render_window_n_pass<render_windowobj_pass, 1>, 0>(scanline, 0, width);
             break;
     }
 }
@@ -2240,21 +2240,55 @@ static const u8 active_layers[] = {
     0,
 };
 
+extern "C" void *gGameStageTask;
+extern "C" bool8 gIsTitleScreenActive;
+
 void update_scanline(void)
 {
     u32 pitch = get_screen_pitch();
     u16 dispcnt = read_ioreg(REG_ADDR_DISPCNT);
     u32 vcount = read_ioreg(REG_ADDR_VCOUNT);
-    u16 *screen_offset = get_screen_pixels() + (vcount * pitch);
     u32 video_mode = dispcnt & 0x07;
 
-    order_layers((dispcnt >> 8) & active_layers[video_mode], vcount);
+    bool inGameplay = (gGameStageTask != NULL);
+    bool inTitleScreen = gIsTitleScreenActive;
 
-    // If the screen is in in forced blank draw pure white.
-    if (dispcnt & 0x80)
-        memset(screen_offset, 0xff, DISPLAY_WIDTH * sizeof(u16));
-    else
-        render_scanline_window(screen_offset);
+    if (inGameplay || inTitleScreen) {
+        u16 *screen_offset = get_screen_pixels() + (vcount * pitch);
+        order_layers((dispcnt >> 8) & active_layers[video_mode], vcount);
+
+        // If the screen is in forced blank draw pure white.
+        if (dispcnt & 0x80)
+            memset(screen_offset, 0xff, DISPLAY_WIDTH * sizeof(u16));
+        else
+            render_scanline_window(screen_offset);
+    } else {
+        // Menu scaling: render into a 240x160 GBA buffer and stretch to 426x240
+        static u16 menu_buffer[160 * 240];
+
+        order_layers((dispcnt >> 8) & active_layers[video_mode], vcount);
+
+        if (vcount < 160) {
+            u16 *line_buffer = menu_buffer + (vcount * 240);
+            if (dispcnt & 0x80)
+                memset(line_buffer, 0xff, 240 * sizeof(u16));
+            else
+                render_scanline_window(line_buffer, 240);
+        }
+
+        if (vcount == 159) {
+            u16 *screen = get_screen_pixels();
+            for (u32 y = 0; y < 240; y++) {
+                u32 src_y = (y * 160) / 240;
+                u16 *src_line = menu_buffer + (src_y * 240);
+                u16 *dest_line = screen + (y * pitch);
+                for (u32 x = 0; x < 426; x++) {
+                    u32 src_x = (x * 240) / 426;
+                    dest_line[x] = src_line[src_x];
+                }
+            }
+        }
+    }
 
     // Mode 0 does not use any affine params at all.
     if (video_mode) {
