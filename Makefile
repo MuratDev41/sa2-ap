@@ -253,7 +253,7 @@ FORMAT_H_PATHS   := $(shell find . -name "*.h" ! -path '*/build/*' ! -path '*/ex
 # -P disables line markers (don't EVER use this, if you want proper debug info!)
 # -I sets an include path
 # -D defines a symbol
-CPPFLAGS ?= $(INCLUDE_CPP_ARGS) -D $(GAME_REGION) -D GAME=$(GAME)
+CPPFLAGS ?= $(INCLUDE_CPP_ARGS) -D$(GAME_REGION) -DGAME=$(GAME) -Iext/apclientpp -Iext/wswrap/include -Iext/websocketpp -Iext/valijson/include -Iext -I/opt/homebrew/include -DASIO_STANDALONE -D_WEBSOCKETPP_CPP11_STL_
 CC1FLAGS ?= -Wimplicit -Wparentheses -Werror
 
 ifneq ($(GAME_VARIANT), DEFAULT)
@@ -349,6 +349,7 @@ ifeq ($(PLATFORM),gba)
   CC1FLAGS += -mthumb-interwork
 else
   ifeq ($(PLATFORM), sdl)
+    CXXFLAGS += -frtti -fexceptions -std=c++17
     # for modern we are using a modern compiler
     # so instead of CPP we can use gcc -E to "preprocess only"
     CPP := $(CC1) -E
@@ -383,7 +384,7 @@ endif
 ifeq ($(PLATFORM),gba)
     LIBS := $(ROOT_DIR)/tools/agbcc/lib/libgcc.a $(ROOT_DIR)/tools/agbcc/lib/libc.a $(LIBABGSYSCALL_LIBS)
 else ifeq ($(PLATFORM),sdl)
-    LIBS := $(shell sdl2-config --cflags --libs) $(LIBABGSYSCALL_LIBS) -lm
+    LIBS := $(shell sdl2-config --cflags --libs) $(LIBABGSYSCALL_LIBS) -lm -L/opt/homebrew/lib -lssl -lcrypto
 else ifeq ($(PLATFORM),sdl_psp)
     LIBS := -L$(PSPDEV)/psp/lib $(LIBABGSYSCALL_LIBS) -L$(PSPSDK)/lib -lSDL2 -lm -lGL -lpspvram -lpspaudio -lpspvfpu -lpspdisplay -lpspgu -lpspge -lpsphprm -lpspctrl -lpsppower -lpspdebug -lpspnet -lpspnet_apctl -Wl,-zmax-page-size=128
 else ifeq ($(PLATFORM),ps2)

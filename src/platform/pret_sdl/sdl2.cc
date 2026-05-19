@@ -21,6 +21,7 @@
 #include "imgui.h"
 #include "imgui_impl_sdl2.h"
 #include "imgui_impl_sdlrenderer2.h"
+#include "platform/shared/ap_bridge.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -443,9 +444,92 @@ int main(int argc, char **argv)
 #if ENABLE_VRAM_VIEW
     VramDraw(vramTexture);
 #endif
+    
+    AP_Init();
     AgbMain();
 
     return 0;
+}
+
+#include <vector>
+#include <string>
+#include <chrono>
+
+struct APNotification {
+    std::string text;
+    std::chrono::steady_clock::time_point timestamp;
+    float duration;
+};
+
+extern std::vector<APNotification> AP_GetActiveNotifications();
+extern bool AP_HasActiveNotifications();
+
+void DrawNotificationOverlay(void)
+{
+    auto active = AP_GetActiveNotifications();
+    if (active.empty()) return;
+
+    ImGuiIO& io = ImGui::GetIO();
+    // Position at the bottom-left corner, slightly offset
+    ImGui::SetNextWindowPos(ImVec2(10.0f, io.DisplaySize.y - 10.0f), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | 
+                             ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | 
+                             ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
+
+    if (ImGui::Begin("AP_Notification_Overlay", nullptr, flags)) {
+        auto now = std::chrono::steady_clock::now();
+        
+        // Show the last 5 active notifications, stacked upwards
+        int start_idx = active.size() > 5 ? active.size() - 5 : 0;
+        for (size_t i = start_idx; i < active.size(); i++) {
+            const auto& notif = active[i];
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - notif.timestamp).count() / 1000.0f;
+            
+            // Calculate alpha fadeout
+            float alpha = 1.0f;
+            if (elapsed > notif.duration - 1.0f) {
+                alpha = notif.duration - elapsed; // Fade out in the last second
+                if (alpha < 0.0f) alpha = 0.0f;
+            }
+
+            // Draw a beautiful rounded glassmorphism-styled notification box
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.05f, 0.05f, 0.07f, 0.75f * alpha));
+            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 6.0f);
+            
+            // Auto size based on text length
+            float box_width = ImGui::CalcTextSize(notif.text.c_str()).x + 24.0f;
+            if (box_width < 120.0f) box_width = 120.0f;
+            
+            ImGui::BeginChild(ImGui::GetID((void*)(intptr_t)i), ImVec2(box_width, 32.0f), true, ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoDecoration);
+            
+            // Vertical centering padding
+            ImGui::SetCursorPosY(7.0f);
+            ImGui::SetCursorPosX(12.0f);
+            
+            std::string text = notif.text;
+            
+            // Highlighting colors: Items / Players are colored beautifully!
+            ImVec4 textColor = ImVec4(1.0f, 1.0f, 1.0f, alpha);
+            if (text.find("found") != std::string::npos || text.find("received") != std::string::npos) {
+                ImGui::TextColored(ImVec4(0.4f, 0.7f, 1.0f, alpha), "%s", text.c_str());
+            } else {
+                ImGui::TextColored(textColor, "%s", text.c_str());
+            }
+            
+            ImGui::EndChild();
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor();
+            
+            ImGui::Spacing();
+        }
+    }
+    ImGui::End();
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor();
 }
 
 void DrawImGuiMenu(void)
@@ -584,6 +668,34 @@ void DrawImGuiMenu(void)
             ImGui::SameLine();
             if (ImGui::Button("Warp Forward (+800px)")) {
                 gPlayer.qWorldX += 800 << 8;
+            }
+
+            ImGui::EndTabItem();
+        }
+
+        // --- Archipelago Tab ---
+        if (ImGui::BeginTabItem("Archipelago")) {
+            ImGui::Text("Multiworld Connection");
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            ImGui::InputText("Server Address", gApServerIp, sizeof(gApServerIp));
+            ImGui::InputText("Slot Name", gApSlotName, sizeof(gApSlotName));
+            ImGui::InputText("Password", gApPassword, sizeof(gApPassword));
+            
+            ImGui::Spacing();
+            if (ImGui::Button("Connect to AP", ImVec2(150, 0))) {
+                AP_Connect();
+            }
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Text("Status: ");
+            ImGui::SameLine();
+            if (gApIsConnected) {
+                ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "%s", gApStatusMessage);
+            } else {
+                ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", gApStatusMessage);
             }
 
             ImGui::EndTabItem();
@@ -741,6 +853,7 @@ void VBlankIntrWait(void)
     while (isRunning) {
 #ifndef __PSP__
         ProcessSDLEvents();
+        AP_Update();
 #endif
 
         if (!paused || stepOneFrame) {
@@ -809,19 +922,28 @@ void VBlankIntrWait(void)
             videoScaleChanged = false;
         }
 
-        if (showMenu) {
+        if (showMenu || AP_HasActiveNotifications()) {
             SDL_RenderSetLogicalSize(sdlRenderer, 0, 0);
 
             ImGui_ImplSDLRenderer2_NewFrame();
             ImGui_ImplSDL2_NewFrame();
-            // Override with raw unscaled window mouse coordinates to ensure 100% precision
-            int mx, my;
-            SDL_GetMouseState(&mx, &my);
-            ImGui::GetIO().MousePos = ImVec2((float)mx, (float)my);
+            if (showMenu) {
+                // Override with raw unscaled window mouse coordinates to ensure 100% precision
+                int mx, my;
+                SDL_GetMouseState(&mx, &my);
+                ImGui::GetIO().MousePos = ImVec2((float)mx, (float)my);
+            } else {
+                // Hide mouse cursor from ImGui when developer menu is not active
+                ImGui::GetIO().MousePos = ImVec2(-9999.0f, -9999.0f);
+            }
 
             ImGui::NewFrame();
 
-            DrawImGuiMenu();
+            if (showMenu) {
+                DrawImGuiMenu();
+            }
+            
+            DrawNotificationOverlay();
 
             ImGui::Render();
             ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), sdlRenderer);

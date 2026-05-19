@@ -67,10 +67,15 @@ static const u16 sStageScoreBonusesTexts[][3] = {
 
 static const u16 sStageResultsTextOffset[] = { 0, 69, 173 };
 
+#include "platform/shared/ap_bridge.h"
+
 u16 CreateStageResults(u32 courseTime, u16 ringCount, u8 spRingCount)
 {
     Task *t;
     StageResults *outro;
+    
+    // Archipelago integration: Send the completed stage back to the client
+    AP_SendLocationCheck(LEVEL_TO_ZONE(gCurrentLevel), gCurrentLevel & 3, IS_BOSS_STAGE(gCurrentLevel));
     Sprite *s;
     u8 i;
 
